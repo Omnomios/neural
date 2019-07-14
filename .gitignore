@@ -1,0 +1,8 @@
+.vscode/
+build/
+bin/
+CMakeCache.txt
+CMakeFiles/
+*_log.txt
+Makefile
+ext/Eigen
