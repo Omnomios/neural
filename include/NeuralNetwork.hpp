@@ -5,32 +5,30 @@
 #include <vector>
 #include <valarray>
 
-typedef std::valarray<double> vecXd;
-
-struct neuron
-{
-    double value;
-    double bias;
-    std::valarray<double> weight;
-};
-
-
 class NeuralNetwork
 {
+public:
+    struct Layer
+    {
+        std::valarray<double> value;
+        std::valarray<double> bias;
+        std::vector<std::valarray<double>> weight;
+    };
+
 public:
     NeuralNetwork();
     NeuralNetwork(NeuralNetwork const& rhs);
     NeuralNetwork(std::vector<int> layers);
     ~NeuralNetwork();
 
-    std::vector<std::vector<neuron>> get() const;
-    void set(std::vector<std::vector<neuron>>);
+    std::vector<Layer> dump() const;
+    void restore(std::vector<Layer>);
 
     std::valarray<double> predict(std::valarray<double> const& input);
     void mutate(double factor);
 
 private:
-    std::vector<std::vector<neuron>> layer;
+    std::vector<Layer> layer;
     bool initialized = false;
 };
 

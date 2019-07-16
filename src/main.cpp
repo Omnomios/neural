@@ -39,7 +39,7 @@ int main()
     std::vector<NeuralNetwork> networks(16);
     for(NeuralNetwork& network: networks) network = NeuralNetwork({2, 16, 16, 1});
 
-    const int threads = 2;
+    const int threads = 1;
     std::vector<CostCalculator> calculate(threads);
     for(CostCalculator& worker: calculate) worker.setData(smp);
 
@@ -67,7 +67,7 @@ int main()
             calculate[index%threads].addWork(&network);
             index++;
         }
-//        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         for(CostCalculator& worker: calculate) worker.start();
 

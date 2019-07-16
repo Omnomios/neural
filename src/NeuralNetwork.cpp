@@ -9,7 +9,7 @@ NeuralNetwork::NeuralNetwork()
 
 NeuralNetwork::NeuralNetwork(NeuralNetwork const& rhs)
 {
-    this->set(rhs.get());
+    this->restore(rhs.dump());
     this->initialized = true;
 }
 
@@ -22,7 +22,14 @@ NeuralNetwork::NeuralNetwork(std::vector<int> layers)
     ita++;
     while(itb != layers.end())
     {
-        this->layer.push_back(std::vector<neuron>(*itb, {0, 0, std::valarray<double>((ita == layers.end())?0:*ita)}));        
+        this->layer.push_back({
+            std::valarray<double>(*itb),        // value
+            std::valarray<double>(*itb),        // bias
+            std::vector<std::valarray<double>>(    // weights
+                *itb,
+                std::valarray<double>((ita == layers.end())?0:*ita)
+            )
+        });
         ita++;itb++;
     } 
 
@@ -34,11 +41,11 @@ NeuralNetwork::~NeuralNetwork()
 
 }
 
-std::vector<std::vector<neuron>> NeuralNetwork::get() const
+std::vector<NeuralNetwork::Layer> NeuralNetwork::dump() const
 {
     return this->layer;
 }
-void NeuralNetwork::set(std::vector<std::vector<neuron>> data)
+void NeuralNetwork::restore(std::vector<Layer> data)
 {
     this->layer = data;
 }
@@ -47,33 +54,31 @@ std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
 {
     assert(this->initialized);
 
-    std::valarray<double> a(input);
+    this->layer[0].value = input;
+    this->layer.back().value *= 0;
 
     for(unsigned int i = 0; i < this->layer.size()-1; i++)
     {
-        auto& sourceLayer = this->layer[i];
-        auto& destLayer = this->layer[i+1];
-
-        // TODO: optimise?
-        std::valarray<double> r(destLayer.size());
+        Layer& sourceLayer = this->layer[i];
+        Layer& destLayer = this->layer[i+1];
 
         // Add up weighted inputs
-        for(unsigned int neuron = 0; neuron < sourceLayer.size(); neuron++)
-        {
-            r += a[neuron] * sourceLayer[neuron].weight;
+        for(auto& weights: sourceLayer.weight)
+        {            
+            destLayer.value += sourceLayer.value * weights;
         }
-
-        // Apply bias
-        for(unsigned int neuron = 0; neuron < destLayer.size(); neuron++)
-        {
-            r[neuron] += destLayer[neuron].bias;
-        }
+        
+        // Need to reset the registers so they don't persist over predicitons.
+        sourceLayer.value *= 0;
+        
+        // Apply the bias values
+        destLayer.value += destLayer.bias;
 
         // Activation function
-        a = 1.0/(1.0 + std::exp(-r));
+        destLayer.value = 1.0/(1.0 + std::exp(-(destLayer.value)));
     } 
 
-    return a;
+    return this->layer.back().value;
 }
 
 void NeuralNetwork::mutate(double factor)
@@ -85,10 +90,10 @@ void NeuralNetwork::mutate(double factor)
 
     for(auto& layer: this->layer)
     {
-        for(auto& neuron: layer)
+        layer.bias += dist(e2);
+        for(auto& weight: layer.weight)
         {
-            neuron.bias += dist(e2);
-            for(double& value: neuron.weight)
+            for(double& value: weight)
             {
                 value += dist(e2);
             }
