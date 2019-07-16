@@ -1,5 +1,4 @@
 #include <iostream>
-
 #include "CostCalculator.hpp"
 
 CostCalculator::CostCalculator()
@@ -14,7 +13,7 @@ CostCalculator::~CostCalculator()
 }
 
 
-void CostCalculator::setData(Matrix data)
+void CostCalculator::setData(std::vector<std::vector<double>> data)
 {
     this->data = data;
 }
@@ -51,12 +50,10 @@ void CostCalculator::workLoop()
         {
             NeuralNetwork* network = this->job.front();
 
-            Matrix m = Matrix(2,1);
-
             float resolution = 4;
 
-            const float dataX = (float)this->data.rows() * resolution;
-            const float dataY = (float)this->data.cols() * resolution;
+            const float dataX = (float)this->data[0].size() * resolution;
+            const float dataY = (float)this->data.size() * resolution;
             const float dataXh = dataX/2;
             const float dataYh = dataY/2;
             const float dataCount = dataX * dataY;
@@ -66,11 +63,12 @@ void CostCalculator::workLoop()
             for(int x = 0; x < dataX; x++)
             for(int y = 0; y < dataY; y++)
             {
-                m(1,0) = ((float)x-dataXh) / dataX;
-                m(0,0) = ((float)y-dataYh) / dataY;
-
-                double actual = network->predict(m)(0,0);
-                double desired = this->data(x / resolution, y / resolution);
+                double actual = network->predict({
+                    ((float)y-dataYh) / dataY,
+                    ((float)x-dataXh) / dataX
+                })[0];
+                
+                double desired = this->data[x / resolution][y / resolution];
                 cost += std::pow(actual - desired, 2);
             }
 

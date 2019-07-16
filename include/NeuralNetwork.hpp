@@ -3,28 +3,34 @@
 
 #include <random>
 #include <vector>
+#include <valarray>
 
-#include "Matrix.hpp"
+typedef std::valarray<double> vecXd;
+
+struct neuron
+{
+    double value;
+    double bias;
+    std::valarray<double> weight;
+};
+
 
 class NeuralNetwork
 {
 public:
     NeuralNetwork();
-    NeuralNetwork(NeuralNetwork const& nn);
+    NeuralNetwork(NeuralNetwork const& rhs);
     NeuralNetwork(std::vector<int> layers);
     ~NeuralNetwork();
 
-    Matrix predict(Matrix const& m) const;
+    std::vector<std::vector<neuron>> get() const;
+    void set(std::vector<std::vector<neuron>>);
+
+    std::valarray<double> predict(std::valarray<double> const& input);
     void mutate(double factor);
 
-    std::pair<std::vector<Matrix>,std::vector<Matrix>> dump() const;
-    void set(std::pair<std::vector<Matrix>,std::vector<Matrix>>);
-
 private:
-    Matrix matmul(Matrix const& x, Matrix const& y) const;
-    Matrix activation(Matrix const& m) const;
-    std::vector<Matrix> weight;
-    std::vector<Matrix> bias;
+    std::vector<std::vector<neuron>> layer;
     bool initialized = false;
 };
 

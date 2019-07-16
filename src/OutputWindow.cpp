@@ -33,8 +33,6 @@ void OutputWindow::renderLoop()
     
     this->window.create(sf::VideoMode(this->windowX, this->windowY), "Output");
 
-    Matrix m = Matrix::Zero(2,1);
-
     while(this->running)
     {
         this->working = false;
@@ -50,10 +48,10 @@ void OutputWindow::renderLoop()
             for(int x = 0; x < this->windowX; x+=this->resolution)
             for(int y = 0; y < this->windowY; y+=this->resolution)
             {
-                m(0) = ((float)x-(this->windowX/2)) / this->windowX;
-                m(1) = ((float)y-(this->windowY/2)) / this->windowY;
-
-                double actual = this->network.predict(m)(0);
+                double actual = this->network.predict({
+                    ((float)x-(this->windowX/2)) / this->windowX,
+                    ((float)y-(this->windowY/2)) / this->windowY
+                })[0];
                 rectangle.setPosition(x,y);
                 rectangle.setFillColor(sf::Color(255*actual, 255*actual, 255*actual));
                 this->window.draw(rectangle);

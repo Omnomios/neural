@@ -7,8 +7,6 @@
 #include "NeuralNetwork.hpp"
 #include "OutputWindow.hpp"
 #include "CostCalculator.hpp"
-#include "Matrix.hpp"
-
 
 void time()
 {
@@ -22,10 +20,9 @@ void time()
 
 int main() 
 {
-    Matrix smp(10, 10);
-
-    smp.set(
-       {{0,0,0,0,0,0,0,0,0,0},
+    std::vector<std::vector<double>> smp(
+       {
+        {0,0,0,0,0,0,0,0,0,0},
         {0,0,0,1,0,0,1,0,0,0},
         {0,0,0,1,0,0,1,0,0,0},
         {0,0,0,1,0,0,1,0,0,0},
@@ -34,19 +31,21 @@ int main()
         {0,1,0,0,0,0,0,0,1,0},
         {0,0,1,0,0,0,0,1,0,0},
         {0,0,0,1,1,1,1,0,0,0},
-        {0,0,0,0,0,0,0,0,0,0}}
+        {0,0,0,0,0,0,0,0,0,0}
+        }
     );
 
+
     std::vector<NeuralNetwork> networks(16);
-    for(NeuralNetwork& network: networks) network = NeuralNetwork({2, 8, 8, 1});
+    for(NeuralNetwork& network: networks) network = NeuralNetwork({2, 16, 16, 1});
 
     const int threads = 2;
     std::vector<CostCalculator> calculate(threads);
-    //for(CostCalculator& worker: calculate) worker.setData(smp);
+    for(CostCalculator& worker: calculate) worker.setData(smp);
 
-    std::pair<double, NeuralNetwork*> bestCost;
+    std::pair<double, NeuralNetwork> bestCost;
     bestCost.first = std::numeric_limits<double>::max();
-    bestCost.second = &networks[0];
+    bestCost.second = networks[0];
 
     OutputWindow preview = OutputWindow(1000, 1000);
     bool waiting = false;
@@ -59,19 +58,21 @@ int main()
         double basecost = bestCost.first;
         bestCost.first = std::numeric_limits<double>::max();
         int index = 0;
+        
         for(NeuralNetwork& network: networks)
         {
             // Breed the chosen one
-            network = *bestCost.second;
+            network = bestCost.second;
             network.mutate(std::min(0.5, std::max(basecost, 0.001)));
             calculate[index%threads].addWork(&network);
             index++;
         }
+//        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         for(CostCalculator& worker: calculate) worker.start();
 
         // Update the outputs while we're waiting for the result.
-        preview.showNetwork(*bestCost.second, std::max((int)(basecost*500), 10));
+        preview.showNetwork(bestCost.second, std::max((int)(basecost*500), 10));
         std::cout << "\e[1;1H\e[2J" << std::endl;
         std::cout << "Generation: "<< generation++ << "\nError: " << basecost << "\n";
 
@@ -98,13 +99,14 @@ int main()
                         if(bestCost.first > result.second)
                         {
                             bestCost.first = result.second;
-                            bestCost.second = result.first;
+                            bestCost.second = *result.first;
                         }
                     }
                 }
+
                 break;
             }
-            std::this_thread::yield();
+            std::this_thread::yield();            
         }
     }
 

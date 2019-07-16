@@ -1,34 +1,31 @@
 #include <iostream>
 #include <assert.h>
+#include <valarray>
 #include "NeuralNetwork.hpp"
-#include "Matrix.hpp"
 
 NeuralNetwork::NeuralNetwork() 
 {
 }
 
-NeuralNetwork::NeuralNetwork(NeuralNetwork const& source) 
+NeuralNetwork::NeuralNetwork(NeuralNetwork const& rhs)
 {
-    this->set(source.dump());
+    this->set(rhs.get());
+    this->initialized = true;
 }
 
 NeuralNetwork::NeuralNetwork(std::vector<int> layers)
 {
-    std::vector<std::pair<int,int>> shapes;
+    this->layer.clear();
 
     auto ita = layers.begin();
     auto itb = layers.begin();
     ita++;
-    while(ita != layers.end())
+    while(itb != layers.end())
     {
-        //this->bias.push_back(Matrix::Zero(*ita,1));        
-        shapes.push_back(std::pair<int,int>(*ita++,*itb++));
+        this->layer.push_back(std::vector<neuron>(*itb, {0, 0, std::valarray<double>((ita == layers.end())?0:*ita)}));        
+        ita++;itb++;
     } 
 
-    for(auto const& value: shapes) 
-    {
-        //this->weight.push_back(Matrix::Zero(value.first, value.second));
-    }
     this->initialized = true;
 }
 
@@ -37,33 +34,44 @@ NeuralNetwork::~NeuralNetwork()
 
 }
 
-std::pair<std::vector<Matrix>,std::vector<Matrix>> NeuralNetwork::dump() const
+std::vector<std::vector<neuron>> NeuralNetwork::get() const
 {
-    return {this->weight, this->bias};
+    return this->layer;
+}
+void NeuralNetwork::set(std::vector<std::vector<neuron>> data)
+{
+    this->layer = data;
 }
 
-void NeuralNetwork::set(std::pair<std::vector<Matrix>,std::vector<Matrix>> data)
-{
-    this->weight = data.first;
-    this->bias = data.second;
-    this->initialized = true;
-}
-
-Matrix NeuralNetwork::predict(Matrix const& m) const
+std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
 {
     assert(this->initialized);
 
-    auto itw = this->weight.begin();
-    auto itb = this->bias.begin();
+    std::valarray<double> a(input);
 
-    Matrix a = m;
-    while(itw != this->weight.end() && itb != this->bias.end())
+    for(unsigned int i = 0; i < this->layer.size()-1; i++)
     {
-        auto w = *itw;
-        auto b = *itb;
-        a = this->activation(this->matmul(w, a).col(0)+b);
-        itw++;itb++;
-    }
+        auto& sourceLayer = this->layer[i];
+        auto& destLayer = this->layer[i+1];
+
+        // TODO: optimise?
+        std::valarray<double> r(destLayer.size());
+
+        // Add up weighted inputs
+        for(unsigned int neuron = 0; neuron < sourceLayer.size(); neuron++)
+        {
+            r += a[neuron] * sourceLayer[neuron].weight;
+        }
+
+        // Apply bias
+        for(unsigned int neuron = 0; neuron < destLayer.size(); neuron++)
+        {
+            r[neuron] += destLayer[neuron].bias;
+        }
+
+        // Activation function
+        a = 1.0/(1.0 + std::exp(-r));
+    } 
 
     return a;
 }
@@ -71,53 +79,19 @@ Matrix NeuralNetwork::predict(Matrix const& m) const
 void NeuralNetwork::mutate(double factor)
 {
     assert(this->initialized);    
-
     std::random_device rd;
     std::mt19937 e2(rd());
     std::uniform_real_distribution<> dist(-factor, factor);
 
-
-    for(auto const& w: this->weight)
+    for(auto& layer: this->layer)
     {
-        w += Matrix(w.rows(), w.cols()).random(-factor, factor);
-    }
-
-    for(auto const& b: this->bias)
-    {
-        for(long int i = 0; i < b.size(); i++)
+        for(auto& neuron: layer)
         {
-            double* v = const_cast<double*>(b.data()+i);
-            *v += dist(e2);
-        }
-    }
-}
-
-Matrix NeuralNetwork::matmul(Matrix const& x, Matrix const& y) const
-{
-    Matrix result = Matrix::Zero(x.rows(), y.rows());
-
-    // iterate through rows of X
-    for(int i=0;i<x.rows();i++)
-    {   // iterate through columns of Y
-        for(int j=0;j<y.cols();j++)
-        {   // iterate through rows of Y
-            for(int k=0;k<y.rows();k++)
+            neuron.bias += dist(e2);
+            for(double& value: neuron.weight)
             {
-                result(i,j) += x(i,k) * y(k,j);
+                value += dist(e2);
             }
         }
     }
-
-    return result;
-}
-
-Matrix NeuralNetwork::activation(Matrix const& m) const
-{
-    for(long int i = 0; i < m.size(); i++)
-    {
-        double* v = const_cast<double*>(m.data()+i);
-        double value = *v;
-        *v = 1.0f / (1.0f + std::exp(-value));
-    }
-    return m;
 }

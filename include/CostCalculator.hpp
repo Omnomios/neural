@@ -1,13 +1,13 @@
 #ifndef costCalculator_hpp
 #define costCalculator_hpp
 
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 
 #include <queue>
 #include "NeuralNetwork.hpp"
-#include "Matrix.hpp"
 
 class CostCalculator
 {
@@ -16,7 +16,7 @@ public:
     ~CostCalculator();
 
     void workLoop();    
-    void setData(Matrix data);
+    void setData(std::vector<std::vector<double>> data);
     void addWork(NeuralNetwork* network);
     void start();
     void terminate();
@@ -29,7 +29,7 @@ private:
 
     std::queue<NeuralNetwork*> job;
 
-    Matrix data;
+    std::vector<std::vector<double>> data;
 
     bool running = true;
     bool working = false;
