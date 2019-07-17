@@ -50,7 +50,7 @@ void CostCalculator::workLoop()
         {
             NeuralNetwork* network = this->job.front();
 
-            float resolution = 4;
+            float resolution = 8;
 
             const float dataX = (float)this->data[0].size() * resolution;
             const float dataY = (float)this->data.size() * resolution;

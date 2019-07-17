@@ -12,23 +12,29 @@ public:
     {
         std::valarray<double> value;
         std::valarray<double> bias;
-        std::vector<std::valarray<double>> weight;
+        std::vector<
+            std::valarray<double>
+        > weight;
+        Layer(int neurons, int links) : value(neurons), bias(neurons), weight(neurons, std::valarray<double>(links)){}        
     };
 
 public:
+    // Lifecycle
     NeuralNetwork();
     NeuralNetwork(NeuralNetwork const& rhs);
     NeuralNetwork(std::vector<int> layers);
     ~NeuralNetwork();
 
+    // State management
     std::vector<Layer> dump() const;
     void restore(std::vector<Layer>);
 
+    // Network functions
     std::valarray<double> predict(std::valarray<double> const& input);
     void mutate(double factor);
 
-    std::vector<Layer> layer;
 private:
+    std::vector<Layer> layer;
     bool initialized = false;
 };
 
