@@ -56,8 +56,6 @@ int main()
     for(NeuralNetwork& network: networks)
     {
         network = NeuralNetwork({2, 16, 16, 1});
-        // First mutation is extreme to find a better starting point.
-        network.mutate(1);
     }
 
     const int threads = 2;
@@ -72,19 +70,24 @@ int main()
     bool waiting = false;
 
     int generation = 0;
+    double startCost = 1.0;
 
     while(true)
     {
-        // Get the best child from the current generation.
-        double basecost = bestCost.first;
+        // Get a benchmark to calculate effectiveness of training.
+        if(generation == 1) startCost = bestCost.first;
+
+        double baseCost = bestCost.first;
         bestCost.first = std::numeric_limits<double>::max();
         int index = 0;
-        
+
+
+        // Get the best child from the current generation.
         for(NeuralNetwork& network: networks)
         {
             // Breed the chosen one
             network = bestCost.second;
-            network.mutate(std::min(0.5, std::max(basecost/2, 0.001)));
+            network.mutate(std::min(1.0, std::max(baseCost/2, 0.001)));
             calculate[index%threads].addWork(&network);
             index++;
         }
@@ -93,9 +96,9 @@ int main()
         for(CostCalculator& worker: calculate) worker.start();
 
         // Update the outputs while we're waiting for the result.
-        preview.showNetwork(bestCost.second, std::max((int)(basecost*500), 10));
+        preview.showNetwork(bestCost.second, std::max((int)(baseCost*500), 10));
         std::cout << "\e[1;1H\e[2J" << std::endl;
-        std::cout << "Generation: "<< generation++ << "\nError: " << basecost << "\n";
+        std::cout << "Generation: "<< generation++ << "\nCost: " << baseCost << "\nConfidence: " << 100-std::round((baseCost / startCost)*100) <<  "%\n";
 
         // Get the result.
         waiting = true;
