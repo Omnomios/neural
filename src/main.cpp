@@ -20,6 +20,7 @@ void time()
 
 int main() 
 {
+
     std::vector<std::vector<double>> smp(
        {
         {0,0,0,0,0,0,0,0,0,0},
@@ -37,9 +38,13 @@ int main()
 
 
     std::vector<NeuralNetwork> networks(16);
-    for(NeuralNetwork& network: networks) network = NeuralNetwork({2, 16, 16, 1});
+    for(NeuralNetwork& network: networks)
+    {
+        network = NeuralNetwork({2, 16, 16, 1});
+        network.mutate(1);
+    }
 
-    const int threads = 1;
+    const int threads = 2;
     std::vector<CostCalculator> calculate(threads);
     for(CostCalculator& worker: calculate) worker.setData(smp);
 

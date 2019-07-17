@@ -27,8 +27,8 @@ public:
     std::valarray<double> predict(std::valarray<double> const& input);
     void mutate(double factor);
 
-private:
     std::vector<Layer> layer;
+private:
     bool initialized = false;
 };
 

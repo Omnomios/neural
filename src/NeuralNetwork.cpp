@@ -55,21 +55,23 @@ std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
     assert(this->initialized);
 
     this->layer[0].value = input;
-    this->layer.back().value *= 0;
 
     for(unsigned int i = 0; i < this->layer.size()-1; i++)
     {
         Layer& sourceLayer = this->layer[i];
         Layer& destLayer = this->layer[i+1];
 
+        // Reset
+        destLayer.value -= destLayer.value;
+
         // Add up weighted inputs
-        for(auto& weights: sourceLayer.weight)
+        for(unsigned int neuron = 0; neuron < sourceLayer.weight.size(); neuron++)
         {            
-            destLayer.value += sourceLayer.value * weights;
+            destLayer.value += sourceLayer.value[neuron] * sourceLayer.weight[neuron];
         }
-        
+
         // Need to reset the registers so they don't persist over predicitons.
-        sourceLayer.value *= 0;
+        //sourceLayer.value -= sourceLayer.value;
         
         // Apply the bias values
         destLayer.value += destLayer.bias;
