@@ -18,10 +18,17 @@ file(GLOB_RECURSE BINARY_SRC "${PROJECT_SOURCE_DIR}/*.cpp")
 
 add_executable(${BINARY_NAME} ${BINARY_SRC})
 
-set(MAKE_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -O2 -Wall -Wno-long-long -Wno-unknown-pragmas -std=c++17 -pthread -pedantic")
+# Set default build type
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+   set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 
-#-finstrument-functions
-set(CMAKE_CXX_FLAGS "${MAKE_FLAGS}")
+# Select flags.
+set(CMAKE_CXX_FLAGS "-Wall -Wno-switch -Wno-long-long -Wno-unknown-pragmas -Wno-narrowing -std=c++17 -pthread -pedantic")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -ggdb")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_DEBUG  "-Og -g -ggdb")
+set(CMAKE_CXX_FLAGS_PROFILE  "-O0 -pg -g -ggdb")
 
 find_package(SFML COMPONENTS graphics window system)
 target_link_libraries(${BINARY_NAME} ${SFML_LIBRARIES} ${SFML_DEPENDENCIES})

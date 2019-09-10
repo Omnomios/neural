@@ -87,7 +87,7 @@ int main()
         {
             // Breed the chosen one
             network = bestCost.second;
-            network.mutate(std::min(1.0, std::max(baseCost/2, 0.001)));
+            network.mutate(std::min(1.0, std::max(baseCost, 0.001)));
             calculate[index%threads].addWork(&network);
             index++;
         }
