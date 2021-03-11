@@ -5,13 +5,17 @@
 
 #include "NeuralNetwork.hpp"
 
-NeuralNetwork::NeuralNetwork(){ }
-NeuralNetwork::NeuralNetwork(NeuralNetwork const& rhs)
+NeuralNetwork::NeuralNetwork ()
+{
+}
+
+NeuralNetwork::NeuralNetwork (NeuralNetwork const& rhs)
 {
     this->restore(rhs.dump());
     this->initialized = true;
 }
-NeuralNetwork::NeuralNetwork(std::vector<int> layers)
+
+NeuralNetwork::NeuralNetwork (std::vector<int> layers)
 {
     this->layer.clear();
 
@@ -22,34 +26,34 @@ NeuralNetwork::NeuralNetwork(std::vector<int> layers)
     {
         // Use the struct constructor to build the data for the layer
         this->layer.push_back(Layer(*currentLayer,(linkedLayer == layers.end())?0:*linkedLayer));
-        
+
         currentLayer++;
         linkedLayer++;
-    } 
+    }
 
     this->initialized = true;
 }
-NeuralNetwork::~NeuralNetwork() { }
+NeuralNetwork::~NeuralNetwork () { }
 
 
 /*
 * Saves and restores the state of the neurons
  */
-std::vector<NeuralNetwork::Layer> NeuralNetwork::dump() const
+std::vector<NeuralNetwork::Layer> NeuralNetwork::dump () const
 {
     return this->layer;
 }
-void NeuralNetwork::restore(std::vector<Layer> data)
+void NeuralNetwork::restore (std::vector<Layer> data)
 {
     this->layer = data;
 }
 
 
 /*
-* Takes a valarray of doubles that matches the size of the first layer and 
+* Takes a valarray of doubles that matches the size of the first layer and
 * return the result of the network calculation.
  */
-std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
+std::valarray<double> NeuralNetwork::predict (std::valarray<double> const& input)
 {
     assert(this->initialized);
 
@@ -67,11 +71,11 @@ std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
         Layer& destLayer = this->layer[i+1];
 
         // Reset target neurons
-        destLayer.value -= destLayer.value;
+        destLayer.value = 0;
 
         // Add up weighted inputs and apply them to the target
         for(unsigned int neuron = 0; neuron < sourceLayer.weight.size(); neuron++)
-        {            
+        {
             destLayer.value += sourceLayer.value[neuron] * sourceLayer.weight[neuron];
         }
 
@@ -79,8 +83,8 @@ std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
         destLayer.value += destLayer.bias;
 
         // Activation function
-        destLayer.value = 1.0/(1.0 + std::exp(-(destLayer.value)));
-    } 
+        destLayer.value = 1.0 / (1.0 + std::exp(-(destLayer.value)));
+    }
 
     return this->layer.back().value;
 }
@@ -89,22 +93,21 @@ std::valarray<double> NeuralNetwork::predict(std::valarray<double> const& input)
 * Applies a random number to every neuron and bias in the network.
 *
 * Note: used for random network evolution.
- */
-void NeuralNetwork::mutate(double factor)
+*/
+
+void NeuralNetwork::mutate (std::mt19937& random, const double& factor)
 {
-    assert(this->initialized);    
-    std::random_device rd;
-    std::mt19937 e2(rd());
+    assert(this->initialized);
     std::uniform_real_distribution<> dist(-factor, factor);
 
     for(auto& layer: this->layer)
     {
-        layer.bias += dist(e2);
+        layer.bias += dist(random);
         for(auto& weight: layer.weight)
         {
             for(double& value: weight)
             {
-                value += dist(e2);
+                value += dist(random);
             }
         }
     }

@@ -14,19 +14,20 @@ public:
     ~OutputWindow();
 
     void renderLoop();
-    void messageLoop();
-    
-    void showNetwork(NeuralNetwork nn, int resolution);
+
+    void showNetwork(const NeuralNetwork& nn, int resolution, const std::string& info);
     void terminate();
+
+    bool isOpen() { return this->running; };
 
 private:
     sf::RenderWindow window;
+    sf::Text text;
 
     std::thread renderThread;
-    std::thread messageThread;
 
     NeuralNetwork network;
-        
+
     const int windowX = 1000;
     const int windowY = 1000;
 

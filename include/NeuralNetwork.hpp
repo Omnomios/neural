@@ -15,7 +15,7 @@ public:
         std::vector<
             std::valarray<double>
         > weight;
-        Layer(int neurons, int links) : value(neurons), bias(neurons), weight(neurons, std::valarray<double>(links)){}        
+        Layer(int neurons, int links) : value(neurons), bias(neurons), weight(neurons, std::valarray<double>(links)){}
     };
 
 public:
@@ -31,7 +31,7 @@ public:
 
     // Network functions
     std::valarray<double> predict(std::valarray<double> const& input);
-    void mutate(double factor);
+    void mutate(std::mt19937& random, const double& factor);
 
 private:
     std::vector<Layer> layer;

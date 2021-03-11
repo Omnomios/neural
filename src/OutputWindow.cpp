@@ -1,36 +1,46 @@
 #include "OutputWindow.hpp"
 
+#include "hackttf.h"
+
 OutputWindow::OutputWindow(int x, int y): windowX(x), windowY(y)
 {
+    this->running = true;
     this->renderThread = std::thread(&OutputWindow::renderLoop, this);
-    this->messageThread = std::thread(&OutputWindow::messageLoop, this);
 }
 
-OutputWindow::~OutputWindow() 
+OutputWindow::~OutputWindow()
 {
     this->running = false;
     this->renderThread.join();
-    this->messageThread.join();
 }
 
-void OutputWindow::showNetwork(NeuralNetwork nn, int resolution)
+void OutputWindow::showNetwork(const NeuralNetwork& nn, int resolution, const std::string& info)
 {
     if(this->working) return; // Discard new network if rendering
     this->resolution = resolution;
     this->network = nn;
-    this->condition.notify_all(); 
+    this->text.setString(info);
+    this->condition.notify_all();
 }
 
 void OutputWindow::terminate()
 {
     this->running = false;
-    this->condition.notify_all(); 
+    this->condition.notify_all();
 }
 
-void OutputWindow::renderLoop() 
+void OutputWindow::renderLoop()
 {
     std::unique_lock<std::mutex> lk(this->mutex);
-    
+
+    sf::Font font;
+    font.loadFromMemory(hack_ttf, hack_ttf_len);
+
+    text.setFont(font);
+    text.setString("");
+    text.setCharacterSize(24);
+    text.setFillColor(sf::Color::White);
+
     this->window.create(sf::VideoMode(this->windowX, this->windowY), "Output");
 
     while(this->running)
@@ -53,33 +63,30 @@ void OutputWindow::renderLoop()
                     ((float)y-(this->windowY/2)) / this->windowY
                 })[0];
                 rectangle.setPosition(x,y);
-                rectangle.setFillColor(sf::Color(255*actual, 255*actual, 255*actual));
+                rectangle.setFillColor(sf::Color(100*actual, 255*actual, 20*actual));
                 this->window.draw(rectangle);
             }
 
+
+            text.setPosition(0,0);
+            window.draw(text);
+
             this->window.display();
+
+            sf::Event event;
+            while (this->window.pollEvent(event))
+            {
+                switch (event.type)
+                {
+                    case sf::Event::Closed:
+                        this->window.close();
+                        this->terminate();
+                    break;
+                    default:
+                    break;
+                }
+            }
         }
     }
     lk.unlock();
-}
-
-void OutputWindow::messageLoop() 
-{
-    while(this->running)
-    {
-        sf::Event event;
-        while (this->window.pollEvent(event))
-        {
-            switch (event.type)
-            {
-                case sf::Event::Closed:
-                    this->window.close();
-                    this->terminate();
-                break;
-                default:
-                break;
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
 }

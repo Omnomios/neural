@@ -4,21 +4,25 @@
 #include <limits>
 #include <chrono>
 
+#include <windows.h>
+
 #include "NeuralNetwork.hpp"
 #include "OutputWindow.hpp"
 #include "CostCalculator.hpp"
 
-void time()
+int64_t time()
 {
     std::chrono::milliseconds ms = std::chrono::duration_cast< std::chrono::milliseconds >(
         std::chrono::system_clock::now().time_since_epoch()
     );
-
-    //std::cout << (int)ms << std::endl;
+    return ms.count();
 }
 
-
-int main() 
+#ifdef WIN32
+int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
+#else
+int main(int argc, char *argv[])
+#endif
 {
 
     /*
@@ -52,13 +56,17 @@ int main()
         }
     );
 
-    std::vector<NeuralNetwork> networks(16);
+    std::vector<NeuralNetwork> networks(48);
     for(NeuralNetwork& network: networks)
     {
         network = NeuralNetwork({2, 16, 16, 1});
     }
 
-    const int threads = 2;
+    std::random_device rd;
+    std::mt19937 e2(rd());
+    e2.seed(time());
+
+    const int threads = 12;
     std::vector<CostCalculator> calculate(threads);
     for(CostCalculator& worker: calculate) worker.setData(smp);
 
@@ -72,7 +80,7 @@ int main()
     int generation = 0;
     double startCost = 1.0;
 
-    while(true)
+    while(preview.isOpen())
     {
         // Get a benchmark to calculate effectiveness of training.
         if(generation == 1) startCost = bestCost.first;
@@ -87,7 +95,7 @@ int main()
         {
             // Breed the chosen one
             network = bestCost.second;
-            network.mutate(std::min(1.0, std::max(baseCost, 0.001)));
+            network.mutate(e2, std::min(1.0, std::max(baseCost, 0.001)));
             calculate[index%threads].addWork(&network);
             index++;
         }
@@ -95,16 +103,20 @@ int main()
 
         for(CostCalculator& worker: calculate) worker.start();
 
+        int confidence = (100-std::round((baseCost / startCost)*100));
+
         // Update the outputs while we're waiting for the result.
-        preview.showNetwork(bestCost.second, std::max((int)(baseCost*500), 10));
-        std::cout << "\e[1;1H\e[2J" << std::endl;
-        std::cout << "Generation: "<< generation++ << "\nCost: " << baseCost << "\nConfidence: " << 100-std::round((baseCost / startCost)*100) <<  "%\n";
+        preview.showNetwork(
+            bestCost.second,
+            std::max((int)(baseCost*500), 10),
+            "Generation: " + std::to_string(generation++) + "\nCost: " + std::to_string(baseCost) + "\nConfidence: " + std::to_string(confidence) + "%\n"
+        );
 
         // Get the result.
         waiting = true;
         while(waiting)
         {
-            int results = 0;        
+            int results = 0;
             for(CostCalculator& worker: calculate)
             {
                 if(worker.done) results++;
@@ -130,9 +142,12 @@ int main()
 
                 break;
             }
-            std::this_thread::yield();            
+            std::this_thread::yield();
         }
+
     }
+
+    for(CostCalculator& worker: calculate) worker.terminate();
 
     return 0;
 }
