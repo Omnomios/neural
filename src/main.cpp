@@ -4,7 +4,9 @@
 #include <limits>
 #include <chrono>
 
+#ifdef WIN32
 #include <windows.h>
+#endif
 
 #include "NeuralNetwork.hpp"
 #include "OutputWindow.hpp"
