@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9.1)
+cmake_minimum_required(VERSION 3.28)
 project (nn)
 
 set(PROJECT_SOURCE_DIR  "src")
@@ -24,15 +24,27 @@ if(WIN32)
 endif()
 
 # Select flags.
-set(CMAKE_CXX_STANDARD 21)
-set(CMAKE_CXX_FLAGS "-Wall -Wno-switch -Wno-long-long -Wno-unknown-pragmas -Wno-narrowing -std=c++2a -pthread -pedantic ${WINDOWS_FLAG}")
+set(CMAKE_CXX_FLAGS "-Wall -Wno-switch -Wno-long-long -Wno-unknown-pragmas -Wno-narrowing -pthread -pedantic ${WINDOWS_FLAG}")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -ggdb")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 set(CMAKE_CXX_FLAGS_DEBUG  "-Og -g -ggdb")
 set(CMAKE_CXX_FLAGS_PROFILE  "-O0 -pg -g -ggdb")
 
-find_package(SFML COMPONENTS graphics window system REQUIRED)
-find_package(Threads REQUIRED)
+# Ensure at least C++17 for SFML 3
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_17)
 
-include_directories(${SFML_INCLUDE_PATH} "C:/Program Files/SFML/include" include)
-target_link_libraries(${BINARY_NAME} ${OPENGL_LIBRARIES} sfml-graphics ${SFML_DEPENDENCIES} ${CMAKE_THREAD_LIBS_INIT})
+# FetchContent SFML 3.0.1 per official guide
+include(FetchContent)
+FetchContent_Declare(SFML
+    GIT_REPOSITORY https://github.com/SFML/SFML.git
+    GIT_TAG 3.0.1
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM)
+FetchContent_MakeAvailable(SFML)
+
+# Include our own headers
+include_directories(include)
+
+# Link against SFML 3 namespaced target
+target_link_libraries(${BINARY_NAME} PRIVATE SFML::Graphics)

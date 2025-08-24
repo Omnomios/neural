@@ -1,6 +1,7 @@
 #include "OutputWindow.hpp"
 
 #include "hackttf.h"
+#include <optional>
 
 OutputWindow::OutputWindow(int x, int y): windowX(x), windowY(y)
 {
@@ -19,7 +20,11 @@ void OutputWindow::showNetwork(const NeuralNetwork& nn, int resolution, const st
     if(this->working) return; // Discard new network if rendering
     this->resolution = resolution;
     this->network = nn;
-    this->text.setString(info);
+    this->infoText = info;
+    if (this->text)
+    {
+        this->text->setString(this->infoText);
+    }
     this->condition.notify_all();
 }
 
@@ -33,15 +38,15 @@ void OutputWindow::renderLoop()
 {
     std::unique_lock<std::mutex> lk(this->mutex);
 
-    sf::Font font;
-    font.loadFromMemory(hack_ttf, hack_ttf_len);
+    if (!this->font.openFromMemory(hack_ttf, hack_ttf_len))
+    {
+        this->running = false;
+        return;
+    }
+    this->text.emplace(this->font, "", 24);
+    this->text->setFillColor(sf::Color::White);
 
-    text.setFont(font);
-    text.setString("");
-    text.setCharacterSize(24);
-    text.setFillColor(sf::Color::White);
-
-    this->window.create(sf::VideoMode(this->windowX, this->windowY), "Output");
+    this->window.create(sf::VideoMode({this->windowX, this->windowY}), "Output");
 
     while(this->running)
     {
@@ -62,28 +67,27 @@ void OutputWindow::renderLoop()
                     ((float)x-(this->windowX/2)) / this->windowX,
                     ((float)y-(this->windowY/2)) / this->windowY
                 })[0];
-                rectangle.setPosition(x,y);
+                rectangle.setPosition({(float)x,(float)y});
                 rectangle.setFillColor(sf::Color(100*actual, 255*actual, 20*actual));
                 this->window.draw(rectangle);
             }
 
 
-            text.setPosition(0,0);
-            window.draw(text);
+            if (this->text)
+            {
+                this->text->setString(this->infoText);
+                this->text->setPosition({0.f,0.f});
+                window.draw(*this->text);
+            }
 
             this->window.display();
 
-            sf::Event event;
-            while (this->window.pollEvent(event))
+            while (const std::optional<sf::Event> event = this->window.pollEvent())
             {
-                switch (event.type)
+                if (event->is<sf::Event::Closed>())
                 {
-                    case sf::Event::Closed:
-                        this->window.close();
-                        this->terminate();
-                    break;
-                    default:
-                    break;
+                    this->window.close();
+                    this->terminate();
                 }
             }
         }

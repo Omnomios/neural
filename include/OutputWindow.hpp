@@ -4,6 +4,8 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <optional>
+#include <string>
 #include <SFML/Graphics.hpp>
 #include "NeuralNetwork.hpp"
 
@@ -22,7 +24,8 @@ public:
 
 private:
     sf::RenderWindow window;
-    sf::Text text;
+    sf::Font font;
+    std::optional<sf::Text> text;
 
     std::thread renderThread;
 
@@ -32,6 +35,7 @@ private:
     const int windowY = 1000;
 
     int resolution = 100;
+    std::string infoText;
 
     bool running = true;
     bool working = false;
