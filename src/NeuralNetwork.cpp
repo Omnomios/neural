@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <valarray>
 #include <exception>
+#include <cmath>
 
 #include "NeuralNetwork.hpp"
 
@@ -12,6 +13,7 @@ NeuralNetwork::NeuralNetwork ()
 NeuralNetwork::NeuralNetwork (NeuralNetwork const& rhs)
 {
     this->restore(rhs.dump());
+    this->lossFunction = rhs.lossFunction;
     this->initialized = true;
 }
 
@@ -89,6 +91,82 @@ std::valarray<double> NeuralNetwork::predict (std::valarray<double> const& input
     return this->layer.back().value;
 }
 
+void NeuralNetwork::backpropagate (std::valarray<double> const& target, const double& learningRate, const double& positiveWeight)
+{
+    assert(this->initialized);
+
+    if(target.size() != this->layer.back().value.size())
+    {
+        throw std::runtime_error("Target size doesn't match output layer in NeuralNetwork!");
+    }
+
+    Layer& output = this->layer.back();
+    for(std::size_t neuron = 0; neuron < output.delta.size(); ++neuron)
+    {
+        // Delegate output-layer loss gradient calculation to selected loss mode.
+        output.delta[neuron] = this->lossFunction.outputDelta(
+            output.value[neuron],
+            target[neuron],
+            positiveWeight
+        );
+    }
+
+    for(std::size_t layerIndex = this->layer.size() - 1; layerIndex > 1; --layerIndex)
+    {
+        Layer& current = this->layer[layerIndex - 1];
+        Layer& next = this->layer[layerIndex];
+
+        current.delta = 0.0;
+        for(std::size_t neuron = 0; neuron < current.weight.size(); ++neuron)
+        {
+            current.delta[neuron] = (current.weight[neuron] * next.delta).sum();
+        }
+
+        current.delta *= current.value * (1.0 - current.value);
+    }
+
+    for(std::size_t layerIndex = 0; layerIndex < this->layer.size() - 1; ++layerIndex)
+    {
+        Layer& source = this->layer[layerIndex];
+        Layer& dest = this->layer[layerIndex + 1];
+
+        for(std::size_t neuron = 0; neuron < source.weight.size(); ++neuron)
+        {
+            source.weight[neuron] -= dest.delta * (learningRate * source.value[neuron]);
+        }
+        dest.bias -= learningRate * dest.delta;
+    }
+}
+
+void NeuralNetwork::randomize (std::mt19937& random)
+{
+    assert(this->initialized);
+
+    for(std::size_t layerIndex = 0; layerIndex < this->layer.size() - 1; ++layerIndex)
+    {
+        Layer& source = this->layer[layerIndex];
+        Layer& dest = this->layer[layerIndex + 1];
+
+        const double fanIn = static_cast<double>(source.value.size());
+        const double fanOut = static_cast<double>(dest.value.size());
+        const double stdDev = std::sqrt(2.0 / (fanIn + fanOut));
+        std::normal_distribution<double> dist(0.0, stdDev);
+
+        for(double& bias: dest.bias)
+        {
+            bias = dist(random);
+        }
+
+        for(auto& neuronWeights: source.weight)
+        {
+            for(double& weight: neuronWeights)
+            {
+                weight = dist(random);
+            }
+        }
+    }
+}
+
 /*
 * Applies a random number to every neuron and bias in the network.
 *
@@ -111,4 +189,19 @@ void NeuralNetwork::mutate (std::mt19937& random, const double& factor)
             }
         }
     }
+}
+
+void NeuralNetwork::setLossType(LossFunction::Type type)
+{
+    this->lossFunction.setType(type);
+}
+
+LossFunction::Type NeuralNetwork::getLossType() const
+{
+    return this->lossFunction.getType();
+}
+
+const char* NeuralNetwork::getLossTypeName() const
+{
+    return this->lossFunction.getTypeName();
 }

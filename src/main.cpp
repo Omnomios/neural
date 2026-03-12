@@ -1,8 +1,9 @@
 #include <iostream>
 #include <vector>
-#include <map>
-#include <limits>
 #include <chrono>
+#include <algorithm>
+#include <cmath>
+#include <numeric>
 
 #ifdef WIN32
 #include <windows.h>
@@ -10,7 +11,6 @@
 
 #include "NeuralNetwork.hpp"
 #include "OutputWindow.hpp"
-#include "CostCalculator.hpp"
 
 int64_t time()
 {
@@ -26,23 +26,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 int main(int argc, char *argv[])
 #endif
 {
-
-    /*
-    std::vector<std::vector<double>> smp(
-        {
-            {0,1,0,1,0,1,0,1,0,1},
-            {1,0,1,0,1,0,1,0,1,0},
-            {0,1,0,1,0,1,0,1,0,1},
-            {1,0,1,0,1,0,1,0,1,0},
-            {0,1,0,1,0,1,0,1,0,1},
-            {1,0,1,0,1,0,1,0,1,0},
-            {0,1,0,1,0,1,0,1,0,1},
-            {1,0,1,0,1,0,1,0,1,0},
-            {0,1,0,1,0,1,0,1,0,1},
-            {1,0,1,0,1,0,1,0,1,0}
-        }
-    );
-    */
     std::vector<std::vector<double>> smp(
         {
             {0,0,0,0,0,0,0,0,0,0},
@@ -58,98 +41,93 @@ int main(int argc, char *argv[])
         }
     );
 
-    std::vector<NeuralNetwork> networks(48);
-    for(NeuralNetwork& network: networks)
-    {
-        network = NeuralNetwork({2, 16, 16, 1});
-    }
-
     std::random_device rd;
-    std::mt19937 e2(rd());
-    e2.seed(time());
+    std::mt19937 random(rd());
+    random.seed(time());
 
-    const int threads = 12;
-    std::vector<CostCalculator> calculate(threads);
-    for(CostCalculator& worker: calculate) worker.setData(smp);
+    NeuralNetwork network({2, 24, 24, 1});
+    network.randomize(random);
+    // Select output loss mode here: BinaryCrossEntropy or MeanSquaredError.
+    const LossFunction::Type selectedLossType = LossFunction::Type::BinaryCrossEntropy;
+    network.setLossType(selectedLossType);
 
-    std::pair<double, NeuralNetwork> bestCost;
-    bestCost.first = std::numeric_limits<double>::max();
-    bestCost.second = networks[0];
+    // Upscaling factor for training samples (10x10 target -> 80x80 sampled grid).
+    const int resolution = 8;
+    // Effective training grid width/height after upscaling.
+    const int dataX = static_cast<int>(smp[0].size()) * resolution;
+    const int dataY = static_cast<int>(smp.size()) * resolution;
+    // Half extents used to normalize x/y coordinates around the image center.
+    const double dataXHalf = dataX / 2.0;
+    const double dataYHalf = dataY / 2.0;
+    // Total number of training points checked in one full pass.
+    const double sampleCount = static_cast<double>(dataX * dataY);
+    const int sampleCountInt = dataX * dataY;
+
+    // Full training passes processed between UI refreshes.
+    const int passesPerFrame = 32;
+    // How strongly each correction changes the network at the start.
+    const double initialLearningRate = 0.15;
+    // Amount the correction strength shrinks after each full pass.
+    const double learningRateDecay = 0.9995;
+    // Smallest allowed correction strength, so learning does not stop.
+    const double minimumLearningRate = 0.02;
+    // Extra loss weight for positive pixels to preserve sparse smile dots.
+    const double positiveClassWeight = 4.0;
+    // Current correction strength, updated as training runs.
+    double learningRate = initialLearningRate;
+
+    std::vector<int> sampleOrder(sampleCountInt);
+    std::iota(sampleOrder.begin(), sampleOrder.end(), 0);
 
     OutputWindow preview = OutputWindow(1000, 1000);
-    bool waiting = false;
-
-    int generation = 0;
+    int passes = 0;
     double startCost = 1.0;
+    double cost = 0.0;
 
     while(preview.isOpen())
     {
-        // Get a benchmark to calculate effectiveness of training.
-        if(generation == 1) startCost = bestCost.first;
-
-        double baseCost = bestCost.first;
-        bestCost.first = std::numeric_limits<double>::max();
-        int index = 0;
-
-
-        // Get the best child from the current generation.
-        for(NeuralNetwork& network: networks)
+        for(int passIndex = 0; passIndex < passesPerFrame; ++passIndex)
         {
-            // Breed the chosen one
-            network = bestCost.second;
-            network.mutate(e2, std::min(1.0, std::max(baseCost, 0.001)));
-            calculate[index%threads].addWork(&network);
-            index++;
+            // Mix the point order each pass so the same scan pattern does not bias learning.
+            std::shuffle(sampleOrder.begin(), sampleOrder.end(), random);
+            cost = 0.0;
+            for(int sampleIndex: sampleOrder)
+            {
+                const int x = sampleIndex / dataY;
+                const int y = sampleIndex % dataY;
+                std::valarray<double> output = network.predict({
+                    (static_cast<double>(y) - dataYHalf) / dataY,
+                    (static_cast<double>(x) - dataXHalf) / dataX
+                });
+                const double desired = smp[x / resolution][y / resolution];
+                const double diff = output[0] - desired;
+                cost += diff * diff;
+                network.backpropagate({desired}, learningRate, positiveClassWeight);
+            }
+            cost /= sampleCount;
+            // Decay learning rate over time to improve fine-detail convergence.
+            learningRate = std::max(minimumLearningRate, learningRate * learningRateDecay);
+            passes++;
         }
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        for(CostCalculator& worker: calculate) worker.start();
+        if(passes == passesPerFrame)
+        {
+            startCost = cost;
+        }
 
-        int confidence = (100-std::round((baseCost / startCost)*100));
+        int confidence = 0;
+        if(startCost > 0.0)
+        {
+            confidence = static_cast<int>(100 - std::round((cost / startCost) * 100.0));
+        }
+        confidence = std::clamp(confidence, 0, 100);
 
-        // Update the outputs while we're waiting for the result.
         preview.showNetwork(
-            bestCost.second,
-            std::max((int)(baseCost*500), 10),
-            "Generation: " + std::to_string(generation++) + "\nCost: " + std::to_string(baseCost) + "\nConfidence: " + std::to_string(confidence) + "%\n"
+            network,
+            std::max(static_cast<int>(cost * 500), 10),
+            "Pass: " + std::to_string(passes) + "\nLoss: " + network.getLossTypeName() + "\nCost: " + std::to_string(cost) + "\nLR: " + std::to_string(learningRate) + "\nConfidence: " + std::to_string(confidence) + "%\n"
         );
-
-        // Get the result.
-        waiting = true;
-        while(waiting)
-        {
-            int results = 0;
-            for(CostCalculator& worker: calculate)
-            {
-                if(worker.done) results++;
-            }
-
-            if(results == threads)
-            {
-                waiting = false; // break out of loop
-                for(CostCalculator& worker: calculate)
-                {
-                    while(!worker.result.empty())
-                    {
-                        std::pair<NeuralNetwork*, double> result = worker.result.front();
-                        worker.result.pop();
-
-                        if(bestCost.first > result.second)
-                        {
-                            bestCost.first = result.second;
-                            bestCost.second = *result.first;
-                        }
-                    }
-                }
-
-                break;
-            }
-            std::this_thread::yield();
-        }
-
     }
-
-    for(CostCalculator& worker: calculate) worker.terminate();
 
     return 0;
 }
