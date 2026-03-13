@@ -38,9 +38,7 @@ NeuralNetwork::NeuralNetwork (std::vector<int> layers)
 NeuralNetwork::~NeuralNetwork () { }
 
 
-/*
-* Saves and restores the state of the neurons
- */
+// Snapshot network state.
 std::vector<NeuralNetwork::Layer> NeuralNetwork::dump () const
 {
     return this->layer;
@@ -51,11 +49,8 @@ void NeuralNetwork::restore (std::vector<Layer> data)
 }
 
 
-/*
-* Takes a valarray of doubles that matches the size of the first layer and
-* return the result of the network calculation.
- */
-std::valarray<double> NeuralNetwork::predict (std::valarray<double> const& input)
+// Forward pass without copying output.
+const std::valarray<double>& NeuralNetwork::predictRef (std::valarray<double> const& input)
 {
     assert(this->initialized);
 
@@ -64,31 +59,109 @@ std::valarray<double> NeuralNetwork::predict (std::valarray<double> const& input
         throw std::runtime_error("Input size doesn't match first layer in NeuralNetwork!");
     }
 
-    // Set the input layer on the network
+    // Load inputs into layer 0.
     this->layer[0].value = input;
 
-    for(unsigned int i = 0; i < this->layer.size()-1; i++)
+    // Walk each layer pair and compute next activations.
+    for(std::size_t i = 0; i < this->layer.size()-1; ++i)
     {
         Layer& sourceLayer = this->layer[i];
         Layer& destLayer = this->layer[i+1];
+        const std::size_t sourceCount = sourceLayer.weight.size();
+        const std::size_t destCount = destLayer.value.size();
 
-        // Reset target neurons
-        destLayer.value = 0;
-
-        // Add up weighted inputs and apply them to the target
-        for(unsigned int neuron = 0; neuron < sourceLayer.weight.size(); neuron++)
+        // Start from bias.
+        for(std::size_t dst = 0; dst < destCount; ++dst)
         {
-            destLayer.value += sourceLayer.value[neuron] * sourceLayer.weight[neuron];
+            destLayer.value[dst] = destLayer.bias[dst];
         }
 
-        // Apply the bias values
-        destLayer.value += destLayer.bias;
+        // Add weighted source contributions (explicit loops avoid temp objects).
+        for(std::size_t src = 0; src < sourceCount; ++src)
+        {
+            const double sourceValue = sourceLayer.value[src];
+            const std::valarray<double>& weightRow = sourceLayer.weight[src];
+            for(std::size_t dst = 0; dst < destCount; ++dst)
+            {
+                destLayer.value[dst] += sourceValue * weightRow[dst];
+            }
+        }
 
-        // Activation function
-        destLayer.value = 1.0 / (1.0 + std::exp(-(destLayer.value)));
+        // Sigmoid in-place.
+        for(std::size_t dst = 0; dst < destCount; ++dst)
+        {
+            const double summed = destLayer.value[dst];
+            destLayer.value[dst] = 1.0 / (1.0 + std::exp(-summed));
+        }
     }
 
     return this->layer.back().value;
+}
+
+std::valarray<double> NeuralNetwork::predict (std::valarray<double> const& input)
+{
+    return this->predictRef(input);
+}
+
+void NeuralNetwork::backpropagateSingle (const double& target, const double& learningRate, const double& positiveWeight)
+{
+    assert(this->initialized);
+
+    Layer& output = this->layer.back();
+    if(output.delta.size() != 1)
+    {
+        throw std::runtime_error("backpropagateSingle requires a single output neuron!");
+    }
+
+    // Single-output delta.
+    output.delta[0] = this->lossFunction.outputDelta(output.value[0], target, positiveWeight);
+
+    // Backprop hidden deltas.
+    for(std::size_t layerIndex = this->layer.size() - 1; layerIndex > 1; --layerIndex)
+    {
+        Layer& current = this->layer[layerIndex - 1];
+        Layer& next = this->layer[layerIndex];
+        const std::size_t currentCount = current.weight.size();
+        const std::size_t nextCount = next.delta.size();
+
+        for(std::size_t neuron = 0; neuron < currentCount; ++neuron)
+        {
+            // Pull error signal from the next layer.
+            double weightedError = 0.0;
+            const std::valarray<double>& weightRow = current.weight[neuron];
+            for(std::size_t nextNeuron = 0; nextNeuron < nextCount; ++nextNeuron)
+            {
+                weightedError += weightRow[nextNeuron] * next.delta[nextNeuron];
+            }
+            // Sigmoid slope from current activation.
+            const double activation = current.value[neuron];
+            current.delta[neuron] = weightedError * activation * (1.0 - activation);
+        }
+    }
+
+    // Apply gradient step to weights and biases.
+    for(std::size_t layerIndex = 0; layerIndex < this->layer.size() - 1; ++layerIndex)
+    {
+        Layer& source = this->layer[layerIndex];
+        Layer& dest = this->layer[layerIndex + 1];
+        const std::size_t sourceCount = source.weight.size();
+        const std::size_t destCount = dest.delta.size();
+
+        for(std::size_t src = 0; src < sourceCount; ++src)
+        {
+            const double scale = learningRate * source.value[src];
+            std::valarray<double>& weightRow = source.weight[src];
+            for(std::size_t dst = 0; dst < destCount; ++dst)
+            {
+                weightRow[dst] -= scale * dest.delta[dst];
+            }
+        }
+
+        for(std::size_t dst = 0; dst < destCount; ++dst)
+        {
+            dest.bias[dst] -= learningRate * dest.delta[dst];
+        }
+    }
 }
 
 void NeuralNetwork::backpropagate (std::valarray<double> const& target, const double& learningRate, const double& positiveWeight)
@@ -100,10 +173,11 @@ void NeuralNetwork::backpropagate (std::valarray<double> const& target, const do
         throw std::runtime_error("Target size doesn't match output layer in NeuralNetwork!");
     }
 
+    // Output deltas from selected loss.
     Layer& output = this->layer.back();
-    for(std::size_t neuron = 0; neuron < output.delta.size(); ++neuron)
+    const std::size_t outputCount = output.delta.size();
+    for(std::size_t neuron = 0; neuron < outputCount; ++neuron)
     {
-        // Delegate output-layer loss gradient calculation to selected loss mode.
         output.delta[neuron] = this->lossFunction.outputDelta(
             output.value[neuron],
             target[neuron],
@@ -111,30 +185,51 @@ void NeuralNetwork::backpropagate (std::valarray<double> const& target, const do
         );
     }
 
+    // Backprop hidden deltas.
     for(std::size_t layerIndex = this->layer.size() - 1; layerIndex > 1; --layerIndex)
     {
         Layer& current = this->layer[layerIndex - 1];
         Layer& next = this->layer[layerIndex];
 
-        current.delta = 0.0;
-        for(std::size_t neuron = 0; neuron < current.weight.size(); ++neuron)
+        const std::size_t currentCount = current.weight.size();
+        const std::size_t nextCount = next.delta.size();
+        for(std::size_t neuron = 0; neuron < currentCount; ++neuron)
         {
-            current.delta[neuron] = (current.weight[neuron] * next.delta).sum();
+            // Pull error signal from the next layer.
+            double weightedError = 0.0;
+            const std::valarray<double>& weightRow = current.weight[neuron];
+            for(std::size_t nextNeuron = 0; nextNeuron < nextCount; ++nextNeuron)
+            {
+                weightedError += weightRow[nextNeuron] * next.delta[nextNeuron];
+            }
+            // Sigmoid slope from current activation.
+            const double activation = current.value[neuron];
+            current.delta[neuron] = weightedError * activation * (1.0 - activation);
         }
-
-        current.delta *= current.value * (1.0 - current.value);
     }
 
+    // Apply gradient step to weights and biases.
     for(std::size_t layerIndex = 0; layerIndex < this->layer.size() - 1; ++layerIndex)
     {
         Layer& source = this->layer[layerIndex];
         Layer& dest = this->layer[layerIndex + 1];
+        const std::size_t sourceCount = source.weight.size();
+        const std::size_t destCount = dest.delta.size();
 
-        for(std::size_t neuron = 0; neuron < source.weight.size(); ++neuron)
+        for(std::size_t src = 0; src < sourceCount; ++src)
         {
-            source.weight[neuron] -= dest.delta * (learningRate * source.value[neuron]);
+            const double scale = learningRate * source.value[src];
+            std::valarray<double>& weightRow = source.weight[src];
+            for(std::size_t dst = 0; dst < destCount; ++dst)
+            {
+                weightRow[dst] -= scale * dest.delta[dst];
+            }
         }
-        dest.bias -= learningRate * dest.delta;
+
+        for(std::size_t dst = 0; dst < destCount; ++dst)
+        {
+            dest.bias[dst] -= learningRate * dest.delta[dst];
+        }
     }
 }
 

@@ -32,7 +32,9 @@ public:
     void restore(std::vector<Layer>);
 
     // Network functions
+    const std::valarray<double>& predictRef(std::valarray<double> const& input);
     std::valarray<double> predict(std::valarray<double> const& input);
+    void backpropagateSingle(const double& target, const double& learningRate, const double& positiveWeight = 1.0);
     void backpropagate(std::valarray<double> const& target, const double& learningRate, const double& positiveWeight = 1.0);
     void randomize(std::mt19937& random);
     void mutate(std::mt19937& random, const double& factor);

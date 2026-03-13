@@ -59,14 +59,14 @@ void OutputWindow::renderLoop()
             this->window.clear(sf::Color::Black);
 
             sf::RectangleShape rectangle(sf::Vector2f(this->resolution, this->resolution));
+            std::valarray<double> input(2);
 
             for(int x = 0; x < this->windowX; x+=this->resolution)
             for(int y = 0; y < this->windowY; y+=this->resolution)
             {
-                double actual = this->network.predict({
-                    ((float)x-(this->windowX/2)) / this->windowX,
-                    ((float)y-(this->windowY/2)) / this->windowY
-                })[0];
+                input[0] = ((float)x-(this->windowX/2)) / this->windowX;
+                input[1] = ((float)y-(this->windowY/2)) / this->windowY;
+                double actual = this->network.predictRef(input)[0];
                 rectangle.setPosition({(float)x,(float)y});
                 rectangle.setFillColor(sf::Color(100*actual, 255*actual, 20*actual));
                 this->window.draw(rectangle);

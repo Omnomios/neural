@@ -47,37 +47,38 @@ int main(int argc, char *argv[])
 
     NeuralNetwork network({2, 24, 24, 1});
     network.randomize(random);
-    // Select output loss mode here: BinaryCrossEntropy or MeanSquaredError.
+    // Choose output loss mode.
     const LossFunction::Type selectedLossType = LossFunction::Type::BinaryCrossEntropy;
     network.setLossType(selectedLossType);
 
-    // Upscaling factor for training samples (10x10 target -> 80x80 sampled grid).
+    // Upscale the 10x10 target grid for denser training points.
     const int resolution = 8;
-    // Effective training grid width/height after upscaling.
+    // Training grid size after scaling.
     const int dataX = static_cast<int>(smp[0].size()) * resolution;
     const int dataY = static_cast<int>(smp.size()) * resolution;
-    // Half extents used to normalize x/y coordinates around the image center.
+    // Center offsets for normalized input coordinates.
     const double dataXHalf = dataX / 2.0;
     const double dataYHalf = dataY / 2.0;
-    // Total number of training points checked in one full pass.
+    // Points processed per pass.
     const double sampleCount = static_cast<double>(dataX * dataY);
     const int sampleCountInt = dataX * dataY;
 
-    // Full training passes processed between UI refreshes.
+    // Passes to run before each UI refresh.
     const int passesPerFrame = 32;
-    // How strongly each correction changes the network at the start.
+    // Starting update scale.
     const double initialLearningRate = 0.15;
-    // Amount the correction strength shrinks after each full pass.
+    // Per-pass learning-rate decay.
     const double learningRateDecay = 0.9995;
-    // Smallest allowed correction strength, so learning does not stop.
+    // Learning-rate floor.
     const double minimumLearningRate = 0.02;
-    // Extra loss weight for positive pixels to preserve sparse smile dots.
+    // Weight positive pixels higher to keep sparse dots.
     const double positiveClassWeight = 4.0;
-    // Current correction strength, updated as training runs.
+    // Current learning rate.
     double learningRate = initialLearningRate;
 
     std::vector<int> sampleOrder(sampleCountInt);
     std::iota(sampleOrder.begin(), sampleOrder.end(), 0);
+    std::valarray<double> input(2);
 
     OutputWindow preview = OutputWindow(1000, 1000);
     int passes = 0;
@@ -88,24 +89,23 @@ int main(int argc, char *argv[])
     {
         for(int passIndex = 0; passIndex < passesPerFrame; ++passIndex)
         {
-            // Mix the point order each pass so the same scan pattern does not bias learning.
+            // Shuffle sample order each pass.
             std::shuffle(sampleOrder.begin(), sampleOrder.end(), random);
             cost = 0.0;
             for(int sampleIndex: sampleOrder)
             {
                 const int x = sampleIndex / dataY;
                 const int y = sampleIndex % dataY;
-                std::valarray<double> output = network.predict({
-                    (static_cast<double>(y) - dataYHalf) / dataY,
-                    (static_cast<double>(x) - dataXHalf) / dataX
-                });
+                input[0] = (static_cast<double>(y) - dataYHalf) / dataY;
+                input[1] = (static_cast<double>(x) - dataXHalf) / dataX;
+                const std::valarray<double>& output = network.predictRef(input);
                 const double desired = smp[x / resolution][y / resolution];
                 const double diff = output[0] - desired;
                 cost += diff * diff;
-                network.backpropagate({desired}, learningRate, positiveClassWeight);
+                network.backpropagateSingle(desired, learningRate, positiveClassWeight);
             }
             cost /= sampleCount;
-            // Decay learning rate over time to improve fine-detail convergence.
+            // Decay learning rate each pass.
             learningRate = std::max(minimumLearningRate, learningRate * learningRateDecay);
             passes++;
         }
