@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     std::mt19937 random(rd());
     random.seed(time());
 
-    NeuralNetwork network({2, 24, 24, 1});
+    NeuralNetwork network({2, 16,8, 1});
     network.randomize(random);
     // Choose output loss mode.
     const LossFunction::Type selectedLossType = LossFunction::Type::BinaryCrossEntropy;
